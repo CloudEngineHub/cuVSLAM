@@ -1,4 +1,5 @@
 var searchData=
 [
-  ['track_237',['Track',['../a00067.html#ae22e3e8ffa94eba88461b24427171348',1,'cuvslam::Odometry::Track()'],['../a00087.html#a2a35b467c10255b5622fe0e9cb8deacf',1,'cuvslam::Slam::Track()']]]
+  ['_7eodometry_237',['~Odometry',['../a00073.html#a7def1969a7e4872deff30124c976f27b',1,'cuvslam::Odometry']]],
+  ['_7eslam_238',['~Slam',['../a00101.html#a6c065232b6218d90cae810a2c8f483fc',1,'cuvslam::Slam']]]
 ];

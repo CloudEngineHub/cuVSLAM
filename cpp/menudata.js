@@ -24,6 +24,7 @@
 */
 var menudata={children:[
 {text:"Main Page",url:"index.html"},
+{text:"Related Pages",url:"pages.html"},
 {text:"Classes",url:"annotated.html",children:[
 {text:"Class List",url:"annotated.html"},
 {text:"Class Hierarchy",url:"inherits.html"},
@@ -57,7 +58,6 @@ var menudata={children:[
 {text:"e",url:"functions_func.html#index_e"},
 {text:"g",url:"functions_func.html#index_g"},
 {text:"l",url:"functions_func.html#index_l"},
-{text:"m",url:"functions_func.html#index_m"},
 {text:"o",url:"functions_func.html#index_o"},
 {text:"r",url:"functions_func.html#index_r"},
 {text:"s",url:"functions_func.html#index_s"},
