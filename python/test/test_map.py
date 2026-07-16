@@ -19,6 +19,10 @@ import unittest
 import numpy as np
 import threading
 from numpy.testing import assert_array_almost_equal
+
+# Unit tests must not require the external Rerun Viewer, even in USE_RERUN builds.
+os.environ.setdefault("RERUN", "0")
+
 import cuvslam as vslam
 import data_gen as data
 

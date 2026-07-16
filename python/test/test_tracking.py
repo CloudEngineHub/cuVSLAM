@@ -12,8 +12,13 @@
 # By using, reproducing, modifying, distributing, performing, or displaying any portion or element
 # of the software or derivative works thereof, you agree to be bound by this License.
 
+import os
 import unittest
 import numpy as np
+
+# Unit tests must not require the external Rerun Viewer, even in USE_RERUN builds.
+os.environ.setdefault("RERUN", "0")
+
 import cuvslam as vslam
 import data_gen as data
 

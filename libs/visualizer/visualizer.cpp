@@ -42,7 +42,9 @@ RerunVisualizer::RerunVisualizer() {
 
 RerunVisualizer::~RerunVisualizer() {
   // Call shutdown in destructor as backup, but explicit shutdown is preferred
-  shutdown();
+  if (recording_.is_enabled()) {
+    shutdown();
+  }
 }
 
 void RerunVisualizer::setupTimeline(size_t frame_id, int64_t timestamp) {
