@@ -16,7 +16,7 @@ changing anything.
 Workflows (`.github/workflows/`):
 
 - `pr-verify.yml` - lint, then build + unit test on x86, Orin, and Thor; eval on the x86 job (fork-gated); posts a KPI table to the PR comment.
-- `nightly.yml` - build + test matrix; eval on every config; writes per-config KPI history and a GitHub Release with a combined KPI table.
+- `nightly.yml` - build + test matrix; eval on the four x86 configs; writes per-config KPI history and versioned Actions artifacts. Manual dispatch from a matching `release/vX.Y.Z` branch promotes the same distributable bytes to a draft GitHub Release.
 - `provision-datasets.yml` - manual `workflow_dispatch` on the default branch; downloads, converts, and uploads a dataset tarball to S3. The only writer of dataset storage.
 - `sync-rulesets.yml` - applies `.github/rulesets/default-branch-ruleset.json` through the API.
 
@@ -31,6 +31,7 @@ CI scripts (`scripts/`):
 - `run_eval.sh` - in container: the active dataset set `DATASETS[]`, runs `cuvslam_app.py`, then the KPI reporter.
 - `cuvslam_kpi_report.py` - KPI math, Markdown `.table`, soft drift check.
 - `kpi_baseline_ranges.json` - committed static drift ranges.
+- `package_cpp_dist.sh` - creates and validates the curated, versioned C++ SDK archive used by Actions and Releases.
 
 Dataset tooling: `tools/datasets/<name>/` (download + `prepare_<name>.sh`), `tools/cuvslam_app/` (eval runner and `edex_reader.py`).
 
@@ -56,7 +57,7 @@ Do not reintroduce gzip: provisioning uses uncompressed `.tar` to cap memory on 
 
 ## Task: control the PR vs nightly matrix
 
-- Nightly configs: `nightly.yml` `strategy.matrix.include`. Eval runs on entries flagged `eval: true` (currently all four x86 configs plus Orin and Thor). Every eval-enabled config needs the `RUNNER_STORAGE_ROOT` mount, the `aws` CLI, and the repo secrets/variables on its runner.
+- Nightly configs: `nightly.yml` `strategy.matrix.include`. Eval runs on entries flagged `eval: true` (currently the four x86 configs). Every eval-enabled config needs the `RUNNER_STORAGE_ROOT` mount and configured repo secrets/variables; the `cuvslam-ci:local` image supplies the AWS CLI.
 - PR config: `pr-verify.yml` runs eval only on `build-test-x86` (fork-gated). `EVAL_CONFIG` is the static slug label for the PR table.
 - Active dataset set: `DATASETS[]` in `run_eval.sh` is global; PR and nightly run the same set. There is no per-pipeline dataset selection today. To run a different set in PR vs nightly, add an env-selected subset in `run_eval.sh` and have each workflow pass the selector.
 

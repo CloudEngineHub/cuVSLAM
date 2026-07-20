@@ -12,7 +12,7 @@ playbooks are in [SKILL.md](SKILL.md).
 ## Pipelines
 
 - `pr-verify.yml`: lint in the CI image, then build + unit test on x86 (fork-gated), Orin, and Thor. The x86 job stages datasets, runs eval, and posts a KPI table to the PR comment. A status job aggregates the required checks.
-- `nightly.yml`: build + test matrix across four x86 CUDA/Ubuntu configs plus Orin and Thor. Every config runs eval (`eval: true`). A GitHub-hosted release job assembles the nightly Release with a combined KPI table and per-config report assets.
+- `nightly.yml`: build + test matrix across four x86 CUDA/Ubuntu configs plus Orin and Thor. The four x86 configs run eval (`eval: true`). Scheduled and ordinary manual runs retain versioned Actions artifacts; a manual dispatch from `release/vX.Y.Z` additionally creates a draft GitHub Release.
 - `provision-datasets.yml`: manual `workflow_dispatch`, gated to the default branch. Builds the CI image, runs `provision_dataset.sh` for the chosen dataset, uploads `<name>.tar`. The only writer of dataset storage.
 - `sync-rulesets.yml`: applies `.github/rulesets/default-branch-ruleset.json` through the GitHub API using `RULESET_ADMIN_TOKEN`, on push to the ruleset path, weekly, and on demand.
 
@@ -44,7 +44,7 @@ flowchart TD
   cache -->|"mount ro /datasets"| app
   history -->|"mount ro (PR) or rw (nightly)"| kpi
   kpi --> out
-  out --> pub["upload-artifact -> PR comment / nightly Release"]
+  out --> pub["upload-artifact -> PR comment / nightly evaluation record"]
 ```
 
 ## Secrets and variables
@@ -72,18 +72,27 @@ Repository secrets, split read from write so fork-reachable jobs never hold a ke
 ## KPI outputs
 
 - Per run: `kpi_<run_id>.json` (raw), `kpi_<run_id>.json.table` (Markdown), `kpi_<run_id>.json.drift` (soft check vs `kpi_baseline_ranges.json`). KPIs are ATE, ARE, Kabsch, tracking losts, and FPS, in ODOM and SLAM modes.
-- Nightly: one combined table with a leading `Config` column (`platform-cuda-ubuntu`); per-config `eval-kpis-<slug>` and `eval-html-report-<slug>` artifacts; KPI history per config at `<RUNNER_STORAGE_ROOT>/cuvslam-ci/kpi-history/<slug>/`. `RUN_ID` is the UTC date.
+- Nightly: one combined table with a leading `Config` column (`platform-cuda-ubuntu`); temporary per-config `eval-kpis-staging-<version>-<slug>` and `eval-reports-staging-<version>-<slug>` artifacts; KPI history per config at `<RUNNER_STORAGE_ROOT>/cuvslam-ci/kpi-history/<slug>/`. `RUN_ID` is the UTC date. After aggregation, staging artifacts are replaced by `cuvslam-evaluation-<version>.tar.gz`.
 - PR: a single table labeled with `EVAL_CONFIG`; `RUN_ID=pr-<number>`; KPI history mounted read-only, so PR runs never write the baseline.
+
+## Nightly artifacts and releases
+
+- `VERSION` is the single package-version source for scheduled, manual, and release runs. Release dispatch additionally requires the `release/vX.Y.Z` branch name to match `VERSION`.
+- Final distributables are packaged once by their producing job and uploaded directly, without an Actions ZIP wrapper: `cuvslam-cpp-<version>-<slug>.tar.gz`, the versioned Python wheels, `cuvslam-docs-<version>.tar.gz`, and `cuvslam-evaluation-<version>.tar.gz`.
+- Each C++ archive contains only `bin/{libcuvslam.so,cuvslam_api_launcher}`, `include/cuvslam/{cuvslam2.h,cuvslam_gpu.h,ground_constraint2.h}`, and `LICENSE`. `scripts/package_cpp_dist.sh` creates and validates this manifest.
+- A release job downloads the `cuvslam-*` distributables and promotes the same bytes to the draft Release. Test-result artifacts remain Actions-only.
+- The Actions summary contains CI test and KPI status. Release notes are generated separately from the evaluation summary, so permanent releases do not contain run metadata or expiring Actions links.
 
 ## Constraints
 
 - Fork isolation: eval and dataset steps run only where `head.repo == github.repository`. Fork code never reaches dataset runners.
 - Credential split: eval steps pass the read-only `AWS_S3_RO_*` pair; only provisioning uses the read-write `AWS_S3_*` pair.
 - Per-config namespacing: KPI history directories and eval artifact names carry the `platform-cuda-ubuntu` slug. Artifact names are immutable in `upload-artifact@v7`, so a multi-config run requires per-config names to avoid an upload collision, and per-config history directories keep each config's diff-vs-previous lineage correct.
+- Direct distributable uploads: `upload-artifact@v7` uses `archive: false` only for single-file C++ archives, wheels, documentation, and the evaluation record. Multi-file diagnostics retain the default ZIP container.
 - Uncompressed `.tar`: gzip was dropped to cap memory on the provisioning runner. Packing (`provision_dataset.sh`) and extraction (`stage_eval_datasets.sh`) stay gzip-free and consistent.
 - KPI history publish uses a direct copy: the S3-backed history mount does not implement `rename(2)`, so `run_eval.sh` copies the KPI JSON straight to the target rather than staging to `.tmp` and `mv`.
 - Fail-fast on `RUNNER_STORAGE_ROOT`: the nightly eval step errors if it is unset rather than building a filesystem-root path; `check_eval_prerequisites.sh` also requires it.
-- Runner requirements: every eval runner (x86 and Jetson) needs the `RUNNER_STORAGE_ROOT` mount and the `aws` CLI. `check_eval_prerequisites.sh` runs on the host and reads the credentials and CLI there.
+- Runner requirements: every eval-enabled runner needs the `RUNNER_STORAGE_ROOT` mount and configured repository secrets/variables. The AWS CLI and `check_eval_prerequisites.sh` run in the CI tools image and read the mounted storage and credentials there.
 - Change isolation: ruleset, CODEOWNERS, and `.github/workflows/**` changes go in their own MR, enforced by the `isolated-ruleset-change` pre-commit hook. Use the `[infra]` MR prefix.
 
 ## Learnings
