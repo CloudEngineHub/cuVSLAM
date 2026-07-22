@@ -8,7 +8,9 @@ if [ "$#" -lt 1 ] || [ "$#" -gt 2 ]; then
   echo "  CUDA_VERSION    CUDA version for base image (default: 12.6.3)"
   echo "  UBUNTU_VERSION  Ubuntu version for base image (default: 24.04)"
   echo "  BASE_IMAGE      Override base Docker image (e.g. NGC Jetson image)"
+  echo "  UBUNTU_PORTS_MIRROR  Optional Ubuntu Ports mirror URL for Jetson builds"
   echo "  EXTRA_CMAKE_ARGS  Additional CMake arguments"
+  echo "  CUVSLAM_REQUIRE_CLEAN_SOURCE  Fail if tracked source files differ from HEAD"
   echo "  BUILD_JOBS      Parallel build jobs, passed as --jobs to build_release.sh"
   echo "                  (default: min(nproc, MemAvailable/4GB) to avoid OOM)"
   exit 1
@@ -24,6 +26,8 @@ DOCKER_BUILD_ARGS=""
 [ -n "${CUDA_VERSION:-}" ] && DOCKER_BUILD_ARGS="$DOCKER_BUILD_ARGS --build-arg CUDA_VERSION=$CUDA_VERSION"
 [ -n "${UBUNTU_VERSION:-}" ] && DOCKER_BUILD_ARGS="$DOCKER_BUILD_ARGS --build-arg UBUNTU_VERSION=$UBUNTU_VERSION"
 [ -n "${BASE_IMAGE:-}" ] && DOCKER_BUILD_ARGS="$DOCKER_BUILD_ARGS --build-arg BASE_IMAGE=$BASE_IMAGE"
+[ -n "${UBUNTU_PORTS_MIRROR:-}" ] \
+  && DOCKER_BUILD_ARGS="$DOCKER_BUILD_ARGS --build-arg UBUNTU_PORTS_MIRROR=$UBUNTU_PORTS_MIRROR"
 docker build -f "$DOCKERFILE" . --network host $DOCKER_BUILD_ARGS --tag cuvslam:local
 
 INSTALL_DIR="/output"
@@ -59,5 +63,6 @@ fi
 docker run --runtime=nvidia --gpus all --rm $TTY_FLAG $DOCKER_USER $DOCKER_VOLUMES \
   -e CUVSLAM_SRC_DIR=/cuvslam \
   -e CUVSLAM_DST_DIR=$INSTALL_DIR/build \
+  -e CUVSLAM_REQUIRE_CLEAN_SOURCE="${CUVSLAM_REQUIRE_CLEAN_SOURCE:-false}" \
   -e EXTRA_CMAKE_ARGS="${EXTRA_CMAKE_ARGS:-}" \
   cuvslam:local /cuvslam/build_release.sh --build_type="$BUILD_TYPE" "${JOBS_ARG[@]}"
