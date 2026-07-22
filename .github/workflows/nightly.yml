@@ -115,8 +115,12 @@ jobs:
         with:
           lfs: false
 
-      - name: Pull LFS test data
-        run: git lfs pull --include="test_data/"
+      - name: Prepare Git checkout for Docker build
+        run: |
+          # Some runner filesystems normalize executable bits, and the LFS clean filter needs writable storage.
+          git config --local core.fileMode false
+          git config --local lfs.storage /tmp/cuvslam-lfs
+          git lfs pull --include="test_data/"
 
       - name: Resolve runner storage root
         if: matrix.eval && vars.RUNNER_STORAGE_ROOT != ''
