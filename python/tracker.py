@@ -28,6 +28,7 @@ class Tracker:
 
     This class automatically manages both the Odometry and SLAM instances,
     providing a simplified interface for common use cases.
+
     """
 
     # Expose inner classes of Odometry & Slam
@@ -151,7 +152,7 @@ class Tracker:
         Higher frequency IMU measurements are recommended.
 
         IMU sensors and cameras clocks must be synchronized. :meth:`track` and :meth:`register_imu_measurement`
-        must be called in strict ascending order of timestamps.
+        must be called in non-decreasing timestamp order; camera frame timestamps must be strictly increasing.
 
         Parameters:
             sensor_index: Sensor index; must be 0, as only one sensor is supported now

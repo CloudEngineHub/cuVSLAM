@@ -9,8 +9,8 @@ Tracking modes
 --------------
 
 The tracker supports several odometry modes — see `cuvslam::Odometry::OdometryMode` for the enum
-and per-mode requirements. The unified `Multisensor` mode (any mix of RGB / RGB-D cameras with an
-optional IMU; requires a cuNLS-enabled build) is configured through
+and per-mode requirements. `Multisensor` accepts at least one RGB-D camera or one overlapping camera
+pair, with an optional IMU, and requires a cuNLS-enabled build. It is configured through
 `cuvslam::Odometry::MultisensorSettings`. A high-level mode chooser table lives in the top-level
 README's "Tracking modes" section.
 
