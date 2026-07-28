@@ -335,7 +335,9 @@ def generate_report(test_folder, comments, stats, generate_pdf=False, config_nam
             pdf_file_name = os.path.join(test_folder, f"{report_basename}.pdf")
             HTML(string=pdf_html).write_pdf(pdf_file_name)
             print(f"{pdf_file_name} was done")
-        except ImportError:
-            print("Warning: weasyprint not installed. Install with 'pip install weasyprint' to generate PDF reports.")
-        except Exception as e:
-            print(f"Error generating PDF: {e}")
+        except ImportError as exc:
+            raise RuntimeError(
+                "PDF generation requires the optional PDF dependencies; install cuvslam-tools[pdf]."
+            ) from exc
+        except Exception as exc:
+            raise RuntimeError(f"PDF generation failed: {exc}") from exc

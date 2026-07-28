@@ -31,7 +31,7 @@ echo "=== Installing cuvslam tools ==="
   python_tools_install_src="$(mktemp -d)"
   trap 'rm -rf "$python_tools_install_src"' EXIT
   cp -a /cuvslam/tools/python_tools/. "$python_tools_install_src/"
-  pip install "$python_tools_install_src"
+  pip install "${python_tools_install_src}[pdf]"
 )
 
 DATASETS=(

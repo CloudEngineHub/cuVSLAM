@@ -12,11 +12,15 @@
 # By using, reproducing, modifying, distributing, performing, or displaying any portion or element
 # of the software or derivative works thereof, you agree to be bound by this License.
 
+import sys
 import tempfile
+import types
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from cuvslam_tools.reporter import cli
+from cuvslam_tools.reporter import generate_report
 
 
 class TestReporterCli(unittest.TestCase):
@@ -29,6 +33,29 @@ class TestReporterCli(unittest.TestCase):
             resolved = cli._resolve_config_path("kitti/kitti-vio_slam_gt.cfg", datasets_root)
 
         self.assertEqual(resolved, config_path)
+
+
+class TestPdfGeneration(unittest.TestCase):
+    def test_missing_pdf_dependency_fails_explicitly(self):
+        with tempfile.TemporaryDirectory() as output_dir:
+            with mock.patch.dict(sys.modules, {"weasyprint": None}):
+                with self.assertRaisesRegex(RuntimeError, r"install cuvslam-tools\[pdf\]"):
+                    generate_report.generate_report(output_dir, [], [], generate_pdf=True)
+
+    def test_pdf_rendering_error_fails_explicitly(self):
+        class FailingHtml:
+            def __init__(self, **_kwargs):
+                pass
+
+            def write_pdf(self, _path):
+                raise OSError("renderer failed")
+
+        weasyprint = types.ModuleType("weasyprint")
+        weasyprint.HTML = FailingHtml
+        with tempfile.TemporaryDirectory() as output_dir:
+            with mock.patch.dict(sys.modules, {"weasyprint": weasyprint}):
+                with self.assertRaisesRegex(RuntimeError, "PDF generation failed: renderer failed"):
+                    generate_report.generate_report(output_dir, [], [], generate_pdf=True)
 
 
 if __name__ == "__main__":
