@@ -12,20 +12,20 @@
 # By using, reproducing, modifying, distributing, performing, or displaying any portion or element
 # of the software or derivative works thereof, you agree to be bound by this License.
 
-import unittest
-import cuvslam as vslam
+# Tests of the public cuVSLAM API. They link the library the same way a user application would.
 
-class TestApi(unittest.TestCase):
-    def test_public_api(self):
-        self.assertIn('Tracker', dir(vslam))
-        self.assertIn('Odometry', dir(vslam))
-        self.assertIn('Slam', dir(vslam))
+set(SOURCES
+    image_format_test.cpp
+    pose_test.cpp
+    tracker_test.cpp
+    )
 
-    def test_core_api_is_deprecated(self):
-        with self.assertWarns(DeprecationWarning):
-            core = vslam.core
-        self.assertIs(core.Odometry, vslam.Odometry)
-        self.assertIs(core.Slam, vslam.Slam)
+set(LIBS
+    cuvslam
+    )
 
-if __name__ == "__main__":
-    unittest.main()
+setup_test_project(
+    MODULE_NAME "cuvslam"
+    SOURCES ${SOURCES}
+    LIBRARIES ${LIBS}
+    )
