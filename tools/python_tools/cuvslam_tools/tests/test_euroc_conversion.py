@@ -12,6 +12,7 @@
 # By using, reproducing, modifying, distributing, performing, or displaying any portion or element
 # of the software or derivative works thereof, you agree to be bound by this License.
 
+import contextlib
 import io
 import json
 import os
@@ -23,6 +24,7 @@ from pathlib import Path
 from unittest import mock
 
 from cuvslam_tools.dataset_preparation.euroc import convert_euroc
+from cuvslam_tools.dataset_preparation.euroc import prepare as euroc_prepare
 
 
 _CAMERA_X_IN_BODY = [
@@ -272,7 +274,7 @@ class TestEurocConvertedSequence(unittest.TestCase):
 
 
 class TestEurocConfigGeneration(unittest.TestCase):
-    def test_prepare_script_converts_explicit_subset_end_to_end(self):
+    def test_prepare_converts_explicit_subset_end_to_end(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             raw = root / "raw"
@@ -290,28 +292,17 @@ class TestEurocConfigGeneration(unittest.TestCase):
                 "printf '363f5c2502b469cdd97ef85997714806  %s\\n' \"$2\"\n"
             )
             md5sum.chmod(0o755)
-            env = dict(os.environ)
-            env["PATH"] = f"{fake_bin}:{env['PATH']}"
-            script = Path(convert_euroc.__file__).with_name("prepare_euroc.sh")
 
-            completed = subprocess.run(
-                [
-                    "bash",
-                    str(script),
-                    "--raw-dir",
-                    str(raw),
-                    "--output-dir",
-                    str(output),
-                    "--sequences",
-                    "MH_01_easy",
-                ],
-                check=False,
-                capture_output=True,
-                text=True,
-                env=env,
-            )
+            # The cached archive lets the real download script verify and reuse it.
+            with mock.patch.dict(os.environ, {"PATH": f"{fake_bin}:{os.environ['PATH']}"}):
+                with contextlib.redirect_stdout(io.StringIO()):
+                    prepared = euroc_prepare.prepare(
+                        raw_dir=raw,
+                        output_dir=output,
+                        sequences=["MH_01_easy"],
+                    )
 
-            self.assertEqual(completed.returncode, 0, completed.stderr)
+            self.assertEqual(prepared, output / "euroc")
             self.assertTrue((output / "euroc" / "dataset_metadata.json").is_file())
             self.assertTrue((output / "euroc" / "MH_01_easy" / "gt.txt").is_file())
 
@@ -531,6 +522,67 @@ class TestEurocConversionFailures(unittest.TestCase):
                 )
                 with self.assertRaisesRegex(convert_euroc.ConversionError, "unsafe image filename"):
                     convert_euroc.convert(raw, self.output / str(index), ["MH_01_easy"])
+
+
+class TestEurocBundleSelection(unittest.TestCase):
+    """Selecting the wrong bundle downloads 6-12 GB that is not needed.
+
+    The default and unknown-sequence cases are covered by the conversion tests
+    above; these pin the per-group mapping and the resulting download arguments.
+    """
+
+    def test_each_sequence_group_maps_to_its_own_bundle(self):
+        cases = {
+            "MH_03_medium": ["machine_hall.zip"],
+            "V1_02_medium": ["vicon_room1.zip"],
+            "V2_03_difficult": ["vicon_room2.zip"],
+        }
+        for sequence, expected in cases.items():
+            with self.subTest(sequence=sequence):
+                self.assertEqual(convert_euroc.required_archives([sequence]), expected)
+
+    def test_mixed_subset_keeps_bundle_order(self):
+        self.assertEqual(
+            convert_euroc.required_archives(["V2_01_easy", "MH_01_easy"]),
+            ["machine_hall.zip", "vicon_room2.zip"],
+        )
+
+    def test_explicit_subset_downloads_only_its_bundles(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            raw_dir = Path(temporary) / "raw"
+            with mock.patch.object(euroc_prepare, "run_download_script") as download:
+                with contextlib.redirect_stdout(io.StringIO()):
+                    euroc_prepare.prepare(
+                        raw_dir=raw_dir,
+                        output_dir=Path(temporary) / "converted",
+                        sequences=["MH_01_easy", "V1_01_easy"],
+                        download_only=True,
+                    )
+
+        self.assertEqual(
+            download.call_args.args[1],
+            [str(raw_dir), "--archive", "machine_hall.zip", "--archive", "vicon_room1.zip"],
+        )
+
+
+class TestEurocDownloadScript(unittest.TestCase):
+    def test_corrupt_cached_archive_is_rejected(self):
+        """A truncated multi-GB download must not be handed to the converter."""
+        script = Path(convert_euroc.__file__).with_name("download_euroc.sh")
+        with tempfile.TemporaryDirectory() as temporary:
+            raw_dir = Path(temporary)
+            (raw_dir / "machine_hall.zip").write_bytes(b"corrupt")
+
+            completed = subprocess.run(
+                ["bash", str(script), "--archive", "machine_hall.zip", str(raw_dir)],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+
+        self.assertEqual(completed.returncode, 1)
+        self.assertIn("md5 mismatch for existing", completed.stderr)
+        self.assertIn("re-run with --force", completed.stderr)
 
 
 if __name__ == "__main__":

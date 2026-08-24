@@ -103,7 +103,7 @@ undistort_edex_images --help
 
 ## Dataset Preparation
 
-`prepare_kitti` is the installed CLI wrapper for the `cuvslam_tools.dataset_preparation.kitti` workflow. It downloads the KITTI odometry archives when needed, converts them to cuVSLAM format, and writes the reporter config files produced by that workflow, including:
+`prepare_kitti` runs `cuvslam_tools.dataset_preparation.kitti.prepare`. It downloads the KITTI odometry archives when needed, converts them to cuVSLAM format, and writes the reporter config files produced by that workflow, including:
 
 - `kitti-vio_gt.cfg`
 - `kitti-slam_gt.cfg`
@@ -120,9 +120,18 @@ prepare_kitti \
 
 The converted dataset layout is suitable for tracker and reporter workflows. Pass one of the generated KITTI config files to `cuvslam_reporter --test_config`.
 
-`prepare_euroc` downloads the official Machine Hall, Vicon Room 1, and Vicon Room 2 bundles and converts all 11
-EuRoC MAV sequences. The output is portable: camera images are copied under each prepared sequence instead of
-being linked to raw data outside the prepared root.
+Without `--raw-dir` and `--output-dir`, the command uses `./datasets/kitti/raw` and `./datasets/converted`, relative to
+the current directory. The same workflow is importable, so scripts can prepare a dataset without going through the CLI:
+
+```python
+from cuvslam_tools.dataset_preparation.kitti.prepare import prepare
+
+converted_root = prepare(raw_dir="/data/kitti/raw", output_dir="/data/converted")
+```
+
+`prepare_euroc` runs `cuvslam_tools.dataset_preparation.euroc.prepare`. It downloads the official Machine Hall,
+Vicon Room 1, and Vicon Room 2 bundles and converts all 11 EuRoC MAV sequences. The output is portable: camera
+images are copied under each prepared sequence instead of being linked to raw data outside the prepared root.
 
 ```bash
 prepare_euroc \
@@ -161,7 +170,7 @@ cuvslam_reporter \
     --use_segments
 ```
 
-`prepare_tartan` downloads a TartanGround variant, stages each available `lcam_*`/`rcam_*` stereo pair into the classic TartanAir layout expected by the converter, and converts the staged sequences to EDEX.
+`prepare_tartan` runs `cuvslam_tools.dataset_preparation.tartan.prepare`. It downloads a TartanGround variant, stages each available `lcam_*`/`rcam_*` stereo pair into the classic TartanAir layout expected by the converter, and converts the staged sequences to EDEX.
 
 ```bash
 prepare_tartan \
@@ -170,9 +179,13 @@ prepare_tartan \
     --output-dir /path/to/datasets/converted
 ```
 
+This command needs the [tartanair](https://tartanair.org/installation.html) package for the download step
+(`pip install tartanair`). That package is x86_64-only, so on aarch64 download on an x86_64 machine and transfer the
+data.
+
 Use `--variant multicamera` for EDEX conversion from the 12-camera TartanGround image variant. Both TartanGround variants also download metadata, including `pose_lcam_*` and `pose_rcam_*` files. The multicamera variant converts each complete stereo orientation, for example `P2000_front`, `P2000_left`, and `P2000_right`. The `multisensor` variant is intended for the RGB-D/IMU example data and can be downloaded with `--download-only`.
 
-`prepare_tum` downloads and lays out the TUM RGB-D `freiburg3_long_office_household` dataset and copies the bundled rig calibration into the sequence folder.
+`prepare_tum` runs `cuvslam_tools.dataset_preparation.tum.prepare`. It downloads and lays out the TUM RGB-D `freiburg3_long_office_household` dataset and copies the bundled rig calibration into the sequence folder.
 
 ```bash
 prepare_tum \
@@ -180,7 +193,10 @@ prepare_tum \
     --output-dir /path/to/datasets/converted
 ```
 
-All dataset preparation commands support `--force-download` and `--download-only`.
+All dataset preparation commands support `--force-download` and `--download-only`, default to `./datasets/<dataset>/raw`
+and `./datasets/converted` relative to the current directory, and are implemented as
+`cuvslam_tools.dataset_preparation.<dataset>.prepare`. Each module exposes a `prepare()` function that scripts can call
+directly and a `main()` entry point behind the console command.
 
 ## Tracking
 
