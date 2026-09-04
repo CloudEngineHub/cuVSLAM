@@ -124,6 +124,21 @@ def _load_track():
     return track
 
 
+# Checked only where present, so a disabled stub missing the required keys still passes.
+_SEQUENCE_FLAGS = ("enable", "use_slam", "gt_from_shuttle")
+
+
+def _validate_sequence_flags(index: int, sequence: dict) -> None:
+    """Reject sequence flags that are not real booleans.
+
+    bool("false") is True, so a quoted flag would switch on the very thing it
+    says to switch off.
+    """
+    for key in _SEQUENCE_FLAGS:
+        if key in sequence and not isinstance(sequence[key], bool):
+            raise ValueError(f"Reporter config sequence_cfgs[{index}] key {key} must be a boolean")
+
+
 def _validate_reporter_config(reporter_config: dict) -> tuple[str, list[dict]]:
     """Validate reporter config shape and return dataset and sequence entries."""
     if not isinstance(reporter_config, dict):
@@ -144,6 +159,7 @@ def _validate_reporter_config(reporter_config: dict) -> tuple[str, list[dict]]:
     for index, sequence in enumerate(sequence_cfgs):
         if not isinstance(sequence, dict):
             raise ValueError(f"Reporter config sequence_cfgs[{index}] must be an object")
+        _validate_sequence_flags(index, sequence)
         if sequence.get("enable") is False:
             continue
         for key in ("sequence_title", "sequence_folder"):
@@ -168,8 +184,9 @@ def process_sequence(sequence: dict, args: argparse.Namespace, datasets_root: st
     args_copy.dataset = os.path.join(dataset_base, sequence["sequence_folder"])
     args_copy.config_path = os.path.join(args_copy.dataset, sequence.get("edex_file", "stereo.edex"))
     args_copy.gt_path = _resolve_sequence_gt_path(sequence)
+    args_copy.gt_from_shuttle = sequence.get("gt_from_shuttle", False)
     args_copy.camera_ids = sequence.get("cameras")
-    args_copy.use_slam = bool(sequence.get("use_slam", False))
+    args_copy.use_slam = sequence.get("use_slam", False)
     if "repeat_type" in sequence:
         args_copy.repeat_type = (sequence["repeat_type"] or "none").lower()
     if "sequence_num_repeats" in sequence:

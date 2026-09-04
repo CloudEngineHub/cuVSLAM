@@ -85,10 +85,41 @@ class TestReporterExecution(unittest.TestCase):
         self.assertEqual(args_copy.dataset, expected_dataset)
         self.assertEqual(args_copy.config_path, os.path.join(expected_dataset, "custom.edex"))
         self.assertEqual(args_copy.gt_path, "poses/gt.txt")
+        self.assertFalse(args_copy.gt_from_shuttle)
         self.assertEqual(args_copy.camera_ids, [1, 0])
         self.assertTrue(args_copy.use_slam)
         self.assertEqual(args_copy.repeat_type, "repeat")
         self.assertEqual(args_copy.num_loops, 3)
+
+    def test_process_sequence_forwards_shuttle_ground_truth_opt_in(self):
+        captured_args = []
+        stat = object()
+
+        class _Result:
+            pass
+
+        def track(args):
+            captured_args.append(args)
+            result = _Result()
+            result.stat = stat
+            return result
+
+        args = argparse.Namespace(config_path="", repeat_type="none", num_loops=0)
+        sequence = {
+            "enable": True,
+            "sequence_title": "seq-a",
+            "sequence_folder": "seq-a-folder",
+            "gt_from_shuttle": True,
+            "repeat_type": "Shuttle",
+            "sequence_num_repeats": 1,
+        }
+
+        with mock.patch.object(execution, "_load_track", return_value=track):
+            execution.process_sequence(sequence, args, "/datasets", "dataset")
+
+        args_copy = captured_args[0]
+        self.assertTrue(args_copy.gt_from_shuttle)
+        self.assertIsNone(args_copy.gt_path)
 
     def test_process_sequence_defaults_edex_and_warns_on_empty_gt_path(self):
         captured_args = []
@@ -211,6 +242,30 @@ class TestReporterExecution(unittest.TestCase):
                 {"dataset_folder": "dataset", "sequence_cfgs": [{"sequence_title": "seq-a", "sequence_folder": 1}]},
                 r"Reporter config sequence_cfgs\[0\] key sequence_folder must be a string",
             ),
+            (
+                {
+                    "dataset_folder": "dataset",
+                    "sequence_cfgs": [
+                        {"sequence_title": "seq-a", "sequence_folder": "seq-a", "gt_from_shuttle": "false"}
+                    ],
+                },
+                r"Reporter config sequence_cfgs\[0\] key gt_from_shuttle must be a boolean",
+            ),
+            (
+                {
+                    "dataset_folder": "dataset",
+                    "sequence_cfgs": [{"sequence_title": "seq-a", "sequence_folder": "seq-a", "use_slam": 1}],
+                },
+                r"Reporter config sequence_cfgs\[0\] key use_slam must be a boolean",
+            ),
+            (
+                {"dataset_folder": "dataset", "sequence_cfgs": [{"enable": "false"}]},
+                r"Reporter config sequence_cfgs\[0\] key enable must be a boolean",
+            ),
+            (
+                {"dataset_folder": "dataset", "sequence_cfgs": [{"enable": False, "gt_from_shuttle": "false"}]},
+                r"Reporter config sequence_cfgs\[0\] key gt_from_shuttle must be a boolean",
+            ),
         ]
 
         for reporter_config, error in cases:
@@ -222,6 +277,17 @@ class TestReporterExecution(unittest.TestCase):
                         "/datasets",
                         max_workers=1,
                     )
+
+    def test_run_parallel_tracking_skips_a_disabled_sequence_stub(self):
+        # A disabled sequence may still be a stub: only flags it does carry are checked.
+        stats = execution.run_parallel_tracking(
+            {"dataset_folder": "dataset", "sequence_cfgs": [{"enable": False, "use_slam": True}]},
+            argparse.Namespace(),
+            "/datasets",
+            max_workers=1,
+        )
+
+        self.assertEqual(stats, [])
 
     def test_run_parallel_tracking_raises_when_all_enabled_sequences_fail(self):
         reporter_config = {
