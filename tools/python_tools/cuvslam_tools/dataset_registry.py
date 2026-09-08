@@ -231,6 +231,10 @@ DATASETS: dict[str, DatasetSpec] = {
             ),
         ),
     ),
+    "m3ed_spot": DatasetSpec(
+        dataset_id="m3ed_spot",
+        prepare_module="cuvslam_tools.dataset_preparation.m3ed_spot.prepare",
+    ),
     "tartan": DatasetSpec(
         dataset_id="tartan",
         prepare_module="cuvslam_tools.dataset_preparation.tartan.prepare",
