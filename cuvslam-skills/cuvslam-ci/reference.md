@@ -89,13 +89,19 @@ Repository secrets, split read from write so fork-reachable jobs never hold a ke
   sequence checks (`max_ate_pct`, `max_lost_frame_pct`, `exclude_failed`), the rolling-baseline settings, and per-metric drift `tolerances`; a
   dataset also holds calibrated `expected` values keyed `<METRIC>_<TYPE>_<MODE>`. A malformed file raises, because
   the sequence checks change KPI values.
-- Rolling-baseline check: `collect -H` reads the last `baseline_window` `kpi_<run>.json` files from the config's
-  KPI history (skipping the current run's) and stores each key's series in the report's `baseline` block. `render`
-  and `aggregate` list KPIs worse than the series median by more than max(`baseline_mad_k` × MAD,
-  `baseline_min_pct` % of the median), in the worse direction only (FPS down, the rest up), needing at least 3 runs.
-  The nightly aggregate first averages each history run across the configurations, so its band reflects the noise of
-  the aggregated mean. PR runs compare against `main`'s nightly history for `EVAL_CONFIG`. It never fails the job, and
-  a manually dispatched nightly writes into the history like a scheduled one.
+- Regression check: `collect -H` reads the last `baseline_window` `kpi_<run>.json` files from the config's KPI
+  history (skipping the current run's; nights without a run simply do not exist) and stores each key's series in the
+  report's `baseline` block. Many SLAM KPIs flip between a few discrete values run to run, so instead of a band around
+  a median, the check learns known levels: a value is on a known level when at least `baseline_level_min_runs` history
+  values lie within max(`baseline_level_pct` % of the median, 2 × MAD) of it, the earliest at least
+  `baseline_level_min_age_days` old. The two Ubuntu builds of a CUDA version run identical computations, so they form
+  one group with a pooled history. A KPI regresses (⚠) when, in every build of a group, it is off every known level and
+  worse than all of them: flips land on known levels, and a one-off jump in one build is not confirmed by the other. A
+  new level stays flagged until it is old enough to be known; a better one is listed, collapsed, as a new better level.
+  Defaults: 14 runs, 5%, 2 runs, 7 days. FPS is only checked with `collect --flag-fps`, which `run_eval.sh` passes on
+  aarch64 (Jetson runners run one job each; the x86 GPU runners are shared). PR runs compare their one build against
+  `main`'s nightly history for `EVAL_CONFIG`. Table Δ is the change from the median of the last runs. It never fails
+  the job.
 - Drift check: covers every key the registry's `kpi-keys` lists for the suite, plus any calibrated key. The tolerance
   is the calibrated entry's own (`{"value": ..., "tol_pct"|"tol_abs": ...}`), else the dataset's for that metric,
   else the default's. Uncalibrated keys are SKIPPED.
@@ -105,9 +111,10 @@ Repository secrets, split read from write so fork-reachable jobs never hold a ke
   sequences out of the ATE, ARE and Kabsch means (TUM and TartanAir); Losts and FPS always cover every sequence.
 - Nightly: `cuvslam_kpi_report.py aggregate` publishes one row per evaluation (dataset, type, mode). KPI cells contain
   the mean and population standard deviation across all four x86 configurations, except the counts Losts and Failed,
-  which show min–max. Each cell's second line (`<br><sub>Δ …</sub>`) is the change from the previous nightly: of the
-  mean, or of min/max. The last column counts broken sequences (failed in every configuration) and flaky ones (failed
-  in some), and a collapsed "Failed sequences" section lists them. `aggregate --values-only` drops the changes, the
+  which show min–max. Each cell's second line (`<br><sub>Δ …</sub>`) is the change from the rolling-baseline median:
+  of the mean, or of min/max. Broken / flaky, next to Failed, counts the failed sequences that failed in every
+  configuration and in some; a collapsed "Failed sequences" section lists them. FPS is the last column, and the notes,
+  naming the configurations, follow the table. `aggregate --values-only` drops the changes, the
   Broken / flaky column, the regression check, and the failed-sequence list for release notes. Temporary per-config `eval-kpis-staging-<version>-<slug>` and
   `eval-reports-staging-<version>-<slug>` artifacts, raw per-config JSON, reports, and history remain namespaced by
   `platform-cuda-ubuntu`. `RUN_ID` is the UTC date. After aggregation, staging artifacts are replaced by
@@ -157,6 +164,9 @@ Repository secrets, split read from write so fork-reachable jobs never hold a ke
 - Direct distributable uploads: `upload-artifact@v7` uses `archive: false` only for single-file C++ archives, wheels, documentation, and the evaluation record. Multi-file diagnostics retain the default ZIP container.
 - Release safety: only manual dispatches from validated `release/*` branches can publish, and they create drafts. Scheduled runs have no `contents: write` permission. Rebuilding requires explicit deletion of the previous draft; published Releases and existing tags are never moved or replaced.
 - Uncompressed `.tar`: gzip was dropped to cap memory on the provisioning runner. Packing (`provision_dataset.sh`) and extraction (`stage_eval_datasets.sh`) stay gzip-free and consistent.
+- KPI history is written only by scheduled nightlies on `main` (`eval_cuvslam_in_docker.sh` checks the event and ref).
+  Manual dispatches, including from branches and `release/*`, and PR runs mount it read-only, so a branch's results
+  never become the baseline that diffs and the regression check compare against.
 - KPI history publish uses a direct copy: the S3-backed history mount does not implement `rename(2)`, so `run_eval.sh` copies the KPI JSON straight to the target rather than staging to `.tmp` and `mv`.
 - Fail-fast on `RUNNER_STORAGE_ROOT`: the nightly eval step errors if it is unset rather than building a filesystem-root path; `check_eval_prerequisites.sh` also requires it.
 - Runner requirements: every eval-enabled runner needs the `RUNNER_STORAGE_ROOT` mount and configured repository secrets/variables. The AWS CLI and `check_eval_prerequisites.sh` run in the CI tools image and read the mounted storage and credentials there.
